@@ -2,12 +2,13 @@ package handler
 
 import (
 	"WebApp/internal/core"
+	"context"
 	"github.com/gofiber/fiber/v2"
+	"net/http"
 )
 
 type UserService interface {
-	GetAll() []*core.User
-	GetById(id int) *core.User
+	GetById(ctx context.Context, id string) (*core.User, error)
 }
 
 type UserHandler struct {
@@ -19,14 +20,21 @@ func NewUserHandler(service UserService) *UserHandler {
 }
 
 func (handler *UserHandler) InitRoutes(app *fiber.App) {
-	app.Get("/users", handler.GetAll)
+	app.Get("/users/:userId", handler.GetById)
 }
 
-func (handler *UserHandler) GetAll(ctx *fiber.Ctx) error {
-	users := handler.userService.GetAll()
+func (handler *UserHandler) GetById(ctx *fiber.Ctx) error {
+	user, err := handler.userService.GetById(ctx.UserContext(), ctx.Params("userId"))
 
-	return ctx.Status(200).JSON(
+	if err != nil {
+		return ctx.Status(http.StatusInternalServerError).JSON(
+			fiber.Map{
+				"error": err.Error(),
+			})
+	}
+
+	return ctx.Status(http.StatusOK).JSON(
 		fiber.Map{
-			"Users": users,
+			"User": user,
 		})
 }

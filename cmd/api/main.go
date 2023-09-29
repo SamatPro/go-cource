@@ -2,34 +2,53 @@ package main
 
 import (
 	_ "WebApp/docs"
-	"WebApp/internal/repository/memory"
+	"WebApp/internal/config"
+	"WebApp/internal/repository/mongo"
 	"WebApp/internal/service"
 	"WebApp/internal/transport/rest/handler"
+	"context"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/log"
-	"github.com/gofiber/swagger"
 	"github.com/spf13/viper"
+	"time"
 )
 
 func main() {
-	viper.SetConfigFile(".env")
-
-	if err := viper.ReadInConfig(); err != nil {
-		log.Panic(err)
+	if err := SetupViper(); err != nil {
+		log.Fatal(err.Error())
 	}
-
-	port := viper.Get("PORT").(string)
 
 	app := fiber.New()
 
-	app.Get("/swagger/*", swagger.HandlerDefault)
+	config.SetupSwagger(app)
 
-	userRepository := memory.NewUserRepository()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	mongoDatabase, err := config.SetupMongoDatabase(ctx, cancel)
+
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	userRepository := mongo.NewUserRepository(mongoDatabase.Collection("go_study_wa"))
 	userService := service.NewUserService(userRepository)
 	userHandler := handler.NewUserHandler(userService)
 
 	userHandler.InitRoutes(app)
+
+	port := viper.GetString("http.port")
 	if err := app.Listen(":" + port); err != nil {
-		log.Panic(err)
+		log.Fatal(err)
 	}
+}
+
+func SetupViper() error {
+	viper.AddConfigPath("configs")
+	viper.SetConfigName("config")
+
+	if err := viper.ReadInConfig(); err != nil {
+		return err
+	}
+
+	return nil
+
 }
